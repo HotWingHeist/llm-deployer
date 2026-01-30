@@ -25,6 +25,17 @@ public partial class MainWindow : Window
         {
             // Set up Chat Tab
             ChatMessagesPanel.ItemsSource = _chatViewModel.ChatMessages;
+            ModelSelectionComboBox.DataContext = _chatViewModel;
+            
+            // Subscribe to collection changes for auto-scroll
+            _chatViewModel.ChatMessages.CollectionChanged += (s, e) => 
+            {
+                Dispatcher.InvokeAsync(() => 
+                {
+                    ChatScrollViewer.ScrollToBottom();
+                }, System.Windows.Threading.DispatcherPriority.Background);
+            };
+            
             _chatViewModel.Initialize();
             
             // Add welcome message
@@ -35,17 +46,9 @@ public partial class MainWindow : Window
                 IsUserMessage = false
             });
             
-            // Set up Resources monitoring - find the resource panel Border and bind it
-            var resourceBorder = FindVisualChild<Border>(this);
-            if (resourceBorder != null)
-            {
-                resourceBorder.DataContext = _resourceViewModel;
-                Debug.WriteLine("[LOADED] ResourceViewModel bound to Border");
-            }
-            else
-            {
-                Debug.WriteLine("[LOADED] Warning: Could not find resource Border");
-            }
+            // Set up Resources monitoring - bind to the named resource panel
+            ResourcePanelBorder.DataContext = _resourceViewModel;
+            Debug.WriteLine("[LOADED] ResourceViewModel bound to ResourcePanelBorder");
             
             // Auto-start monitoring
             _resourceViewModel.Start();
@@ -64,21 +67,6 @@ public partial class MainWindow : Window
         {
             MessageBox.Show($"ERROR: {ex.Message}\n{ex.StackTrace}", "ERROR");
         }
-    }
-
-    private static T? FindVisualChild<T>(DependencyObject obj) where T : DependencyObject
-    {
-        for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(obj); i++)
-        {
-            var child = System.Windows.Media.VisualTreeHelper.GetChild(obj, i);
-            if (child is T result)
-                return result;
-            
-            var childOfChild = FindVisualChild<T>(child);
-            if (childOfChild != null)
-                return childOfChild;
-        }
-        return null;
     }
 
     private async void SendButton_Click(object sender, RoutedEventArgs e)
@@ -114,6 +102,8 @@ public partial class MainWindow : Window
     {
         _resourceViewModel.Stop();
         _resourceViewModel.Dispose();
+        _chatViewModel?.Dispose();
+        Debug.WriteLine("[EXIT] Application closing");
         Application.Current.Shutdown();
     }
 

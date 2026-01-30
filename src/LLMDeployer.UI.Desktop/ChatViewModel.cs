@@ -6,7 +6,7 @@ using LLMDeployer.Core.Models;
 
 namespace LLMDeployer.UI.Desktop;
 
-public class ChatViewModel : INotifyPropertyChanged
+public class ChatViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly ModelManager _modelManager;
     private readonly ChatService _chatService;
@@ -15,9 +15,48 @@ public class ChatViewModel : INotifyPropertyChanged
     private bool _isSendEnabled = false;
     private string _statusText = "Ready";
     private LlmModel? _selectedModel;
+    private string _selectedOllamaModel = "mistral";
 
     public ObservableCollection<ChatMessageViewModel> ChatMessages { get; } = new();
     public ObservableCollection<LlmModel> LoadedModels { get; } = new();
+    public ObservableCollection<string> AvailableOllamaModels { get; } = new();
+
+    public string SelectedOllamaModel
+    {
+        get => _selectedOllamaModel;
+        set
+        {
+            if (_selectedOllamaModel != value)
+            {
+                _selectedOllamaModel = value;
+                
+                if (value == "🤖 Auto (Optimal)")
+                {
+                    _ = SelectOptimalModelAsync();
+                }
+                else
+                {
+                    _modelManager.SetSelectedModel(value);
+                }
+                
+                OnPropertyChanged();
+                System.Diagnostics.Debug.WriteLine($"[ChatViewModel] Selected Ollama model: {value}");
+            }
+        }
+    }
+
+    private async Task SelectOptimalModelAsync()
+    {
+        try
+        {
+            var optimalModel = await _modelManager.SelectOptimalModelAsync();
+            System.Diagnostics.Debug.WriteLine($"[ChatViewModel] Auto-selected optimal model: {optimalModel}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ChatViewModel] Error auto-selecting model: {ex.Message}");
+        }
+    }
 
     public string InputText
     {
@@ -93,11 +132,14 @@ public class ChatViewModel : INotifyPropertyChanged
             _currentSession = _chatService.StartSession(model.Id);
             System.Diagnostics.Debug.WriteLine($"[INIT] Step 4b: Session created: {_currentSession.Id}");
             
-            System.Diagnostics.Debug.WriteLine("[INIT] Step 5: Setting UI state...");
+            System.Diagnostics.Debug.WriteLine("[INIT] Step 5: Loading available models...");
+            _ = LoadAvailableModelsAsync();
+            
+            System.Diagnostics.Debug.WriteLine("[INIT] Step 6: Setting UI state...");
             StatusText = "✓ Ready";
             IsSendEnabled = true;
             
-            System.Diagnostics.Debug.WriteLine("[INIT] Step 6: INITIALIZATION COMPLETE!");
+            System.Diagnostics.Debug.WriteLine("[INIT] Step 7: INITIALIZATION COMPLETE!");
         }
         catch (Exception ex)
         {
@@ -134,9 +176,12 @@ public class ChatViewModel : INotifyPropertyChanged
             var response = await _chatService.SendMessageAsync(_currentSession.Id, message);
             System.Diagnostics.Debug.WriteLine($"[SEND] Got response: {response.Substring(0, Math.Min(100, response.Length))}");
             
+            // Clean up the response formatting
+            var cleanedResponse = CleanResponseText(response);
+            
             ChatMessages.Add(new ChatMessageViewModel 
             { 
-                Content = response, 
+                Content = cleanedResponse, 
                 Role = "assistant",
                 IsUserMessage = false 
             });
@@ -177,13 +222,87 @@ public class ChatViewModel : INotifyPropertyChanged
         });
     }
 
+    private string CleanResponseText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return text;
+
+        // Remove <think> tags and their content
+        text = System.Text.RegularExpressions.Regex.Replace(
+            text, 
+            @"<think>.*?</think>", 
+            "", 
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        // Clean up LaTeX math notation (simple conversion)
+        text = System.Text.RegularExpressions.Regex.Replace(
+            text,
+            @"\\frac\{([^}]+)\}\{([^}]+)\}",
+            "$1/$2");
+
+        text = text.Replace(@"\times", "×");
+        text = text.Replace(@"\(", "");
+        text = text.Replace(@"\)", "");
+        text = text.Replace(@"\[", "");
+        text = text.Replace(@"\]", "");
+
+        // Remove extra spaces between single characters
+        text = System.Text.RegularExpressions.Regex.Replace(
+            text,
+            @"(?<=\b\w)\s+(?=\w\b)",
+            "");
+
+        // Clean up multiple consecutive spaces
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s{2,}", " ");
+
+        // Clean up extra line breaks (more than 2)
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\n{3,}", "\n\n");
+
+        return text.Trim();
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     protected void OnPropertyChanged([CallerMemberName] string? name = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
-}
+    private async Task LoadAvailableModelsAsync()
+    {
+        try
+        {
+            var models = await _modelManager.GetAvailableModelsAsync();
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                AvailableOllamaModels.Clear();
+                
+                // Add Auto option first
+                AvailableOllamaModels.Add("🤖 Auto (Optimal)");
+                
+                foreach (var model in models)
+                {
+                    AvailableOllamaModels.Add(model);
+                }
+                
+                // Default to Auto selection
+                SelectedOllamaModel = "🤖 Auto (Optimal)";
+                
+                System.Diagnostics.Debug.WriteLine($"[ChatViewModel] Loaded {models.Count} models + Auto option");
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ChatViewModel] Failed to load models: {ex.Message}");
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_modelManager is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+    }}
 
 public class ChatMessageViewModel
 {

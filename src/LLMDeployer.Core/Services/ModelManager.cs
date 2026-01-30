@@ -8,15 +8,20 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 
-public class ModelManager : IModelManager
+public class ModelManager : IModelManager, IDisposable
 {
     private readonly Dictionary<string, LlmModel> _models = new();
     private readonly HttpClient _httpClient;
     private const string OLLAMA_API_URL = "http://localhost:11434/api/generate";
+    private const string OLLAMA_TAGS_URL = "http://localhost:11434/api/tags";
+    private System.Diagnostics.Process? _ollamaProcess;
+    private bool _startedOllama;
+    private string _selectedModelName = "mistral";
 
     public ModelManager()
     {
-        _httpClient = new HttpClient() { Timeout = TimeSpan.FromSeconds(120) };
+        _httpClient = new HttpClient() { Timeout = TimeSpan.FromMinutes(5) }; // Increased for first model load
+        EnsureOllamaRunningAsync().Wait();
     }
 
     public Task<LlmModel> LoadModelAsync(string modelPath)
@@ -50,6 +55,158 @@ public class ModelManager : IModelManager
         return Task.FromResult(_models.Values.AsEnumerable());
     }
 
+    public async Task<List<string>> GetAvailableModelsAsync()
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync(OLLAMA_TAGS_URL);
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                using (JsonDocument doc = JsonDocument.Parse(json))
+                {
+                    var models = new List<string>();
+                    if (doc.RootElement.TryGetProperty("models", out var modelsArray))
+                    {
+                        foreach (var model in modelsArray.EnumerateArray())
+                        {
+                            if (model.TryGetProperty("name", out var name))
+                            {
+                                models.Add(name.GetString() ?? "");
+                            }
+                        }
+                    }
+                    System.Diagnostics.Debug.WriteLine($"[ModelManager] Found {models.Count} models: {string.Join(", ", models)}");
+                    return models;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModelManager] Failed to get models: {ex.Message}");
+        }
+        return new List<string> { "mistral" }; // Default fallback
+    }
+
+    public void SetSelectedModel(string modelName)
+    {
+        _selectedModelName = modelName;
+        System.Diagnostics.Debug.WriteLine($"[ModelManager] Selected model changed to: {modelName}");
+    }
+
+    public string GetSelectedModel()
+    {
+        return _selectedModelName;
+    }
+
+    public async Task<string> SelectOptimalModelAsync()
+    {
+        try
+        {
+            var availableModels = await GetAvailableModelsAsync();
+            if (availableModels.Count == 0)
+            {
+                System.Diagnostics.Debug.WriteLine("[ModelManager] No models available");
+                return "mistral";
+            }
+
+            // Get system memory
+            var totalMemoryGB = GetTotalSystemMemoryGB();
+            System.Diagnostics.Debug.WriteLine($"[ModelManager] System memory: {totalMemoryGB:F1} GB");
+
+            // Model preference order based on memory and quality
+            var modelPreferences = new Dictionary<string, (int minMemoryGB, int priority)>
+            {
+                { "deepseek-r1:70b", (64, 10) },
+                { "deepseek-r1:32b", (32, 9) },
+                { "llama2:70b", (48, 8) },
+                { "mistral:7b", (16, 7) },
+                { "deepseek-r1:14b", (16, 7) },
+                { "llama2:13b", (16, 6) },
+                { "deepseek-r1:8b", (8, 6) },
+                { "deepseek-r1:7b", (8, 6) },
+                { "mistral", (8, 5) },
+                { "llama2", (8, 5) },
+                { "phi", (4, 4) },
+                { "gemma:7b", (8, 4) },
+                { "gemma:2b", (4, 3) },
+                { "deepseek-r1:1.5b", (2, 2) }
+            };
+
+            // Find best available model that fits in memory
+            string? bestModel = null;
+            int bestPriority = -1;
+
+            foreach (var model in availableModels)
+            {
+                var modelName = model.ToLower();
+                
+                // Try exact match first
+                if (modelPreferences.TryGetValue(modelName, out var pref))
+                {
+                    if (totalMemoryGB >= pref.minMemoryGB && pref.priority > bestPriority)
+                    {
+                        bestModel = model;
+                        bestPriority = pref.priority;
+                    }
+                }
+                else
+                {
+                    // Try partial match (e.g., "mistral:latest" matches "mistral")
+                    foreach (var kvp in modelPreferences)
+                    {
+                        if (modelName.StartsWith(kvp.Key) || modelName.Contains(kvp.Key))
+                        {
+                            if (totalMemoryGB >= kvp.Value.minMemoryGB && kvp.Value.priority > bestPriority)
+                            {
+                                bestModel = model;
+                                bestPriority = kvp.Value.priority;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Fallback to first available model
+            if (bestModel == null && availableModels.Count > 0)
+            {
+                bestModel = availableModels[0];
+            }
+
+            var selectedModel = bestModel ?? "mistral";
+            System.Diagnostics.Debug.WriteLine($"[ModelManager] Auto-selected optimal model: {selectedModel} (priority: {bestPriority})");
+            
+            SetSelectedModel(selectedModel);
+            return selectedModel;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModelManager] Error selecting optimal model: {ex.Message}");
+            return "mistral";
+        }
+    }
+
+    private static double GetTotalSystemMemoryGB()
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                // Use WMI/Performance Counter approach instead
+                using var searcher = new System.Management.ManagementObjectSearcher("SELECT TotalVisibleMemorySize FROM Win32_OperatingSystem");
+                foreach (System.Management.ManagementObject obj in searcher.Get())
+                {
+                    var memoryKB = Convert.ToUInt64(obj["TotalVisibleMemorySize"]);
+                    return (double)memoryKB / (1024 * 1024); // KB to GB
+                }
+            }
+        }
+        catch { }
+        
+        return 8.0; // Default estimate
+    }
+
     public async Task<string> InferenceAsync(string modelId, string prompt, int maxTokens = 100)
     {
         if (string.IsNullOrWhiteSpace(prompt))
@@ -57,16 +214,24 @@ public class ModelManager : IModelManager
 
         try
         {
-            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Starting inference request to Ollama...");
+            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Starting inference with model: {_selectedModelName}");
+            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Prompt: {prompt.Substring(0, Math.Min(50, prompt.Length))}...");
             System.Diagnostics.Debug.WriteLine($"[INFERENCE] Ollama URL: {OLLAMA_API_URL}");
+            
             // Try to use Ollama API (local LLM)
             var result = await CallOllamaAsync(prompt, maxTokens);
-            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Got Ollama response successfully");
+            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Got Ollama response successfully: {result.Substring(0, Math.Min(50, result.Length))}...");
             return result;
+        }
+        catch (TaskCanceledException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Timeout - model loading can take 30-60 seconds on first use");
+            throw new TimeoutException($"Request timed out. First model load can take 30-60 seconds. Please try again.", ex);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[INFERENCE] Ollama failed ({ex.GetType().Name}): {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Stack: {ex.StackTrace}");
             System.Diagnostics.Debug.WriteLine($"[INFERENCE] Falling back to mock response");
             // Fallback to mock response if Ollama is not available
             return GetMockResponse(prompt);
@@ -79,7 +244,7 @@ public class ModelManager : IModelManager
         
         var requestBody = new
         {
-            model = "mistral",  // Change to your preferred model: mistral, neural-chat, llama2, etc.
+            model = _selectedModelName,
             prompt = prompt,
             stream = false,
             num_predict = maxTokens,
@@ -138,9 +303,9 @@ public class ModelManager : IModelManager
                 "I'm in good shape and ready to chat. What's on your mind?"
             }},
             { "what is", new[] { 
-                $"That's a great question about {prompt.Substring(8)}. It's a complex topic that involves many aspects. Would you like me to explain further?",
-                $"Regarding {prompt.Substring(8)}, it's important to understand the context. This typically refers to...",
-                $"{prompt.Substring(8)} is an interesting subject. Let me provide some insight..."
+                $"That's a great question. It's a complex topic that involves many aspects. Would you like me to explain further?",
+                $"That's an important question. It's important to understand the context. This typically refers to...",
+                $"That's a great inquiry. Let me provide some insight on this topic..."
             }},
             { "help", new[] { 
                 "Of course! I'm here to help. What do you need assistance with?",
@@ -177,5 +342,104 @@ public class ModelManager : IModelManager
 
         var rnd = new Random();
         return defaultResponses[rnd.Next(defaultResponses.Length)];
+    }
+
+    private async Task EnsureOllamaRunningAsync()
+    {
+        try
+        {
+            // Check if Ollama is already running
+            var existingProcesses = System.Diagnostics.Process.GetProcessesByName("ollama");
+            if (existingProcesses.Length > 0)
+            {
+                System.Diagnostics.Debug.WriteLine("[ModelManager] Ollama already running");
+                return;
+            }
+
+            // Find Ollama executable
+            var ollamaPath = FindOllamaExecutable();
+            if (string.IsNullOrEmpty(ollamaPath))
+            {
+                System.Diagnostics.Debug.WriteLine("[ModelManager] Ollama not found, using mock responses");
+                return;
+            }
+
+            // Start Ollama
+            System.Diagnostics.Debug.WriteLine($"[ModelManager] Starting Ollama from {ollamaPath}");
+            _ollamaProcess = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = ollamaPath,
+                Arguments = "serve",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            });
+
+            _startedOllama = true;
+            
+            // Wait a bit for Ollama to start
+            await Task.Delay(2000);
+            System.Diagnostics.Debug.WriteLine("[ModelManager] Ollama started successfully");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModelManager] Failed to start Ollama: {ex.Message}");
+        }
+    }
+
+    private static string? FindOllamaExecutable()
+    {
+        var possiblePaths = new[]
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Ollama", "ollama.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Ollama", "ollama.exe"),
+            "ollama.exe" // Try PATH
+        };
+
+        foreach (var path in possiblePaths)
+        {
+            if (File.Exists(path))
+                return path;
+        }
+
+        // Try to find in PATH
+        try
+        {
+            var pathEnv = Environment.GetEnvironmentVariable("PATH");
+            if (pathEnv != null)
+            {
+                var paths = pathEnv.Split(Path.PathSeparator);
+                foreach (var dir in paths)
+                {
+                    var fullPath = Path.Combine(dir, "ollama.exe");
+                    if (File.Exists(fullPath))
+                        return fullPath;
+                }
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    public void Dispose()
+    {
+        if (_startedOllama && _ollamaProcess != null && !_ollamaProcess.HasExited)
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("[ModelManager] Stopping Ollama process");
+                _ollamaProcess.Kill(true);
+                _ollamaProcess.WaitForExit(5000);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ModelManager] Error stopping Ollama: {ex.Message}");
+            }
+        }
+
+        _ollamaProcess?.Dispose();
+        _httpClient?.Dispose();
     }
 }

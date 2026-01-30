@@ -31,13 +31,17 @@
             </Grid.RowDefinitions>
 
             <!-- Chat Messages -->
-            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Background="White" BorderBrush="#DDD" BorderThickness="1">
+            <ScrollViewer x:Name="ChatScrollViewer" Grid.Row="0" VerticalScrollBarVisibility="Auto" Background="White" BorderBrush="#DDD" BorderThickness="1">
                 <ItemsControl x:Name="ChatMessagesPanel">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Margin="0,8,0,0" Padding="12,8" Background="{Binding Background}"
-                                    HorizontalAlignment="{Binding Alignment}" MaxWidth="700">
-                                <TextBlock Text="{Binding Content}" TextWrapping="Wrap" Foreground="Black"/>
+                            <Border Margin="8,8,8,0" Padding="12,10" Background="{Binding Background}"
+                                    HorizontalAlignment="{Binding Alignment}" MaxWidth="700" CornerRadius="8">
+                                <TextBlock Text="{Binding Content}" 
+                                          TextWrapping="Wrap" 
+                                          Foreground="Black"
+                                          FontSize="14"
+                                          LineHeight="20"/>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -46,6 +50,19 @@
 
             <!-- Input Section -->
             <StackPanel Grid.Row="1" Margin="0,15,0,0">
+                <!-- Model Selection -->
+                <Grid Height="35" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Model:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="Bold"/>
+                    <ComboBox x:Name="ModelSelectionComboBox" Grid.Column="1" 
+                              ItemsSource="{Binding AvailableOllamaModels}"
+                              SelectedItem="{Binding SelectedOllamaModel, Mode=TwoWay}"
+                              Height="30" VerticalContentAlignment="Center"/>
+                </Grid>
+                
                 <Grid Height="50" Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -73,7 +90,7 @@
         </Grid>
 
         <!-- Resources Panel (Always Visible on Right) -->
-        <Border Grid.Row="1" Grid.Column="1" Margin="10,20,20,0" Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4">
+        <Border x:Name="ResourcePanelBorder" Grid.Row="1" Grid.Column="1" Margin="10,20,20,0" Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="15">
                 <StackPanel>
                     <!-- Header -->
@@ -99,6 +116,16 @@
                     <ProgressBar Height="12" Background="#e9ecef" Foreground="#28a745" Maximum="100" Value="{Binding MemoryPercent}" Margin="0,0,0,4"/>
                     <TextBlock FontSize="10" Foreground="Gray" Margin="0,0,0,12">
                         <Run Text="{Binding MemoryMegabytes, StringFormat='F0'}"/><Run Text=" MB ("/><Run Text="{Binding MemoryPercent, StringFormat='F1'}"/><Run Text="%)"/>
+                    </TextBlock>
+
+                    <!-- LLM (Ollama) -->
+                    <TextBlock Text="LLM (Ollama):" FontWeight="Bold" FontSize="12" Foreground="#495057" Margin="0,0,0,6"/>
+                    <TextBlock Text="{Binding LlmProcessCount, StringFormat='Processes: {0}'}" FontSize="10" Foreground="Gray" Margin="0,0,0,4"/>
+                    <ProgressBar Height="12" Background="#e9ecef" Foreground="#6f42c1" Maximum="100" Value="{Binding LlmCpuUsagePercent}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding LlmCpuUsagePercent, StringFormat='CPU: {0:F1}%'}" FontSize="10" Foreground="Gray" Margin="0,0,0,6"/>
+                    <ProgressBar Height="12" Background="#e9ecef" Foreground="#6f42c1" Maximum="100" Value="{Binding LlmMemoryPercent}" Margin="0,0,0,4"/>
+                    <TextBlock FontSize="10" Foreground="Gray" Margin="0,0,0,12">
+                        <Run Text="{Binding LlmMemoryMegabytes, StringFormat='F0'}"/><Run Text=" MB ("/><Run Text="{Binding LlmMemoryPercent, StringFormat='F1'}"/><Run Text="%)"/>
                     </TextBlock>
 
                     <!-- GPU -->
@@ -130,6 +157,7 @@
                             <TextBlock Text="Legend:" FontWeight="Bold" FontSize="10" Foreground="#495057" Margin="0,0,0,8"/>
                             <TextBlock Text="Blue = CPU" FontSize="9" Foreground="Gray" Margin="0,0,0,2"/>
                             <TextBlock Text="Green = Memory" FontSize="9" Foreground="Gray" Margin="0,0,0,2"/>
+                            <TextBlock Text="Purple = LLM" FontSize="9" Foreground="Gray" Margin="0,0,0,2"/>
                             <TextBlock Text="Yellow = GPU" FontSize="9" Foreground="Gray" Margin="0,0,0,2"/>
                         </StackPanel>
                     </Border>

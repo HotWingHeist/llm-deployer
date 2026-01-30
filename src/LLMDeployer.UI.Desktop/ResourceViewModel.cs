@@ -14,6 +14,10 @@ public class ResourceViewModel : INotifyPropertyChanged
     private double _cpuUsagePercent;
     private double _memoryMegabytes;
     private double _memoryPercent;
+    private double _llmCpuUsagePercent;
+    private double _llmMemoryMegabytes;
+    private double _llmMemoryPercent;
+    private int _llmProcessCount;
     private double _diskReadMBps;
     private double _diskWriteMBps;
     private double _gpuUsagePercent;
@@ -38,6 +42,30 @@ public class ResourceViewModel : INotifyPropertyChanged
     {
         get => _memoryPercent;
         set { if (_memoryPercent != value) { _memoryPercent = value; OnPropertyChanged(); } }
+    }
+
+    public double LlmCpuUsagePercent
+    {
+        get => _llmCpuUsagePercent;
+        set { if (_llmCpuUsagePercent != value) { _llmCpuUsagePercent = value; OnPropertyChanged(); } }
+    }
+
+    public double LlmMemoryMegabytes
+    {
+        get => _llmMemoryMegabytes;
+        set { if (_llmMemoryMegabytes != value) { _llmMemoryMegabytes = value; OnPropertyChanged(); } }
+    }
+
+    public double LlmMemoryPercent
+    {
+        get => _llmMemoryPercent;
+        set { if (_llmMemoryPercent != value) { _llmMemoryPercent = value; OnPropertyChanged(); } }
+    }
+
+    public int LlmProcessCount
+    {
+        get => _llmProcessCount;
+        set { if (_llmProcessCount != value) { _llmProcessCount = value; OnPropertyChanged(); } }
     }
 
     public double DiskReadMBps
@@ -112,6 +140,10 @@ public class ResourceViewModel : INotifyPropertyChanged
             CpuUsagePercent = metrics.CpuUsagePercent;
             MemoryMegabytes = metrics.MemoryMegabytes;
             MemoryPercent = metrics.MemoryPercent;
+            LlmCpuUsagePercent = metrics.LlmCpuUsagePercent;
+            LlmMemoryMegabytes = metrics.LlmMemoryMegabytes;
+            LlmMemoryPercent = metrics.LlmMemoryPercent;
+            LlmProcessCount = metrics.LlmProcessCount;
             DiskReadMBps = metrics.DiskReadMBps;
             DiskWriteMBps = metrics.DiskWriteMBps;
             GpuUsagePercent = metrics.GpuUsagePercent;
