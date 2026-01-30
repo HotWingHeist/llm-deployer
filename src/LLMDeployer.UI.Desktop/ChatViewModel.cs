@@ -302,6 +302,27 @@ public class ChatViewModel : INotifyPropertyChanged, IDisposable
         {
             disposable.Dispose();
         }
+    }
+
+    public async Task RefreshModelsAsync()
+    {
+        System.Diagnostics.Debug.WriteLine("[ChatViewModel] Refreshing available models...");
+        await LoadAvailableModelsAsync();
+    }
+
+    public async Task ReinitializeModelsAsync()
+    {
+        System.Diagnostics.Debug.WriteLine("[ChatViewModel] Reinitializing model manager after Ollama startup...");
+        try
+        {
+            await _modelManager.ReinitializeAsync();
+            await LoadAvailableModelsAsync();
+            System.Diagnostics.Debug.WriteLine("[ChatViewModel] Model reinitialization complete");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ChatViewModel] Error renitializing: {ex.Message}");
+        }
     }}
 
 public class ChatMessageViewModel

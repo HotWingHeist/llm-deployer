@@ -16,12 +16,49 @@ public class ModelManager : IModelManager, IDisposable
     private const string OLLAMA_TAGS_URL = "http://localhost:11434/api/tags";
     private System.Diagnostics.Process? _ollamaProcess;
     private bool _startedOllama;
-    private string _selectedModelName = "mistral";
+    private string _selectedModelName = ""; // Will be set during initialization
+    private Task? _initializationTask;
 
     public ModelManager()
     {
         _httpClient = new HttpClient() { Timeout = TimeSpan.FromMinutes(5) }; // Increased for first model load
-        EnsureOllamaRunningAsync().Wait();
+        // Don't block the UI thread - initialize asynchronously in background
+        _initializationTask = Task.Run(async () =>
+        {
+            await EnsureOllamaRunningAsync();
+            await InitializeModelAsync();
+        });
+    }
+
+    private async Task InitializeModelAsync()
+    {
+        try
+        {
+            System.Diagnostics.Debug.WriteLine($"[InitializeModelAsync] Starting model initialization...");
+            var models = await GetAvailableModelsAsync();
+            
+            if (models.Count > 0)
+            {
+                _selectedModelName = models[0];
+                System.Diagnostics.Debug.WriteLine($"[InitializeModelAsync] Successfully initialized with model: {_selectedModelName}");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[InitializeModelAsync] No models found from Ollama");
+                // Try one more time after a short delay
+                await Task.Delay(1000);
+                models = await GetAvailableModelsAsync();
+                if (models.Count > 0)
+                {
+                    _selectedModelName = models[0];
+                    System.Diagnostics.Debug.WriteLine($"[InitializeModelAsync] Got model on retry: {_selectedModelName}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[InitializeModelAsync] Error initializing model: {ex.Message}");
+        }
     }
 
     public Task<LlmModel> LoadModelAsync(string modelPath)
@@ -59,10 +96,16 @@ public class ModelManager : IModelManager, IDisposable
     {
         try
         {
+            System.Diagnostics.Debug.WriteLine($"[ModelManager] Fetching models from {OLLAMA_TAGS_URL}");
             var response = await _httpClient.GetAsync(OLLAMA_TAGS_URL);
+            
+            System.Diagnostics.Debug.WriteLine($"[ModelManager] API Response Status: {response.StatusCode}");
+            
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
+                System.Diagnostics.Debug.WriteLine($"[ModelManager] API Response: {json.Substring(0, Math.Min(200, json.Length))}");
+                
                 using (JsonDocument doc = JsonDocument.Parse(json))
                 {
                     var models = new List<string>();
@@ -80,12 +123,18 @@ public class ModelManager : IModelManager, IDisposable
                     return models;
                 }
             }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                System.Diagnostics.Debug.WriteLine($"[ModelManager] API error: {response.StatusCode} - {errorContent}");
+            }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[ModelManager] Failed to get models: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[ModelManager] Failed to get models: {ex.GetType().Name}: {ex.Message}");
         }
-        return new List<string> { "mistral" }; // Default fallback
+        System.Diagnostics.Debug.WriteLine($"[ModelManager] Returning empty model list (Ollama may not be running)");
+        return new List<string>();
     }
 
     public void SetSelectedModel(string modelName)
@@ -97,6 +146,29 @@ public class ModelManager : IModelManager, IDisposable
     public string GetSelectedModel()
     {
         return _selectedModelName;
+    }
+
+    public async Task ReinitializeAsync()
+    {
+        System.Diagnostics.Debug.WriteLine($"[ModelManager] Reinitializing after Ollama startup...");
+        try
+        {
+            // Get fresh models from Ollama
+            var models = await GetAvailableModelsAsync();
+            if (models.Count > 0)
+            {
+                _selectedModelName = models[0];
+                System.Diagnostics.Debug.WriteLine($"[ModelManager] Reinitialized with model: {_selectedModelName}");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[ModelManager] No models found after reinitialization");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModelManager] Error during reinitialization: {ex.Message}");
+        }
     }
 
     public async Task<string> SelectOptimalModelAsync()
@@ -214,26 +286,81 @@ public class ModelManager : IModelManager, IDisposable
 
         try
         {
-            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Starting inference with model: {_selectedModelName}");
+            // Wait for initialization to complete if still in progress
+            if (_initializationTask != null && !_initializationTask.IsCompleted)
+            {
+                System.Diagnostics.Debug.WriteLine($"[INFERENCE] Waiting for initialization to complete...");
+                await _initializationTask;
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Starting inference");
+            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Currently selected model: '{_selectedModelName}'");
             System.Diagnostics.Debug.WriteLine($"[INFERENCE] Prompt: {prompt.Substring(0, Math.Min(50, prompt.Length))}...");
-            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Ollama URL: {OLLAMA_API_URL}");
+            
+            // First verify Ollama is running by checking API
+            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Checking if Ollama API is available at {OLLAMA_TAGS_URL}...");
+            var ollamaAvailable = false;
+            try
+            {
+                using (var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) })
+                {
+                    var tagsResponse = await client.GetAsync(OLLAMA_TAGS_URL);
+                    if (tagsResponse.IsSuccessStatusCode)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[INFERENCE] ✓ Ollama API is responding!");
+                        ollamaAvailable = true;
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[INFERENCE] ✗ Ollama API returned {tagsResponse.StatusCode}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[INFERENCE] ✗ Ollama health check failed: {ex.GetType().Name}: {ex.Message}");
+            }
+
+            if (!ollamaAvailable)
+            {
+                System.Diagnostics.Debug.WriteLine($"[INFERENCE] Ollama is not available - using mock response");
+                return GetMockResponse(prompt);
+            }
+
+            // If we still don't have a model selected, get one now
+            if (string.IsNullOrEmpty(_selectedModelName))
+            {
+                System.Diagnostics.Debug.WriteLine($"[INFERENCE] No model selected! Getting available models...");
+                var models = await GetAvailableModelsAsync();
+                
+                if (models.Count > 0)
+                {
+                    _selectedModelName = models[0];
+                    System.Diagnostics.Debug.WriteLine($"[INFERENCE] ✓ Selected model on-demand: {_selectedModelName}");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[INFERENCE] ✗ CRITICAL: No models available from Ollama!");
+                    return GetMockResponse(prompt);
+                }
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Using model: {_selectedModelName}");
             
             // Try to use Ollama API (local LLM)
             var result = await CallOllamaAsync(prompt, maxTokens);
-            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Got Ollama response successfully: {result.Substring(0, Math.Min(50, result.Length))}...");
+            System.Diagnostics.Debug.WriteLine($"[INFERENCE] ✓ Got response: {result.Substring(0, Math.Min(50, result.Length))}...");
             return result;
         }
         catch (TaskCanceledException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Timeout - model loading can take 30-60 seconds on first use");
+            System.Diagnostics.Debug.WriteLine($"[INFERENCE] ✗ Timeout - model loading can take 30-60 seconds on first use");
             throw new TimeoutException($"Request timed out. First model load can take 30-60 seconds. Please try again.", ex);
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Ollama failed ({ex.GetType().Name}): {ex.Message}");
-            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Stack: {ex.StackTrace}");
-            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Falling back to mock response");
-            // Fallback to mock response if Ollama is not available
+            System.Diagnostics.Debug.WriteLine($"[INFERENCE] ✗ Ollama failed ({ex.GetType().Name}): {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[INFERENCE] Using mock response as fallback");
             return GetMockResponse(prompt);
         }
     }

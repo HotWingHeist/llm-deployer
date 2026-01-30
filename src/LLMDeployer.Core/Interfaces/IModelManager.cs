@@ -8,4 +8,5 @@ public interface IModelManager : IDisposable
     Task UnloadModelAsync(string modelId);
     Task<IEnumerable<LlmModel>> GetLoadedModelsAsync();
     Task<string> InferenceAsync(string modelId, string prompt, int maxTokens = 100);
+    Task ReinitializeAsync();
 }

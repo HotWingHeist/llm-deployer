@@ -18,10 +18,28 @@
         </Grid.ColumnDefinitions>
 
         <!-- Header (Spans both columns) -->
-        <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Margin="20,20,20,0">
-            <TextBlock Text="🤖 LLM Deployer" FontSize="28" FontWeight="Bold" Foreground="#0078D4"/>
-            <TextBlock x:Name="StatusTextBlock" Text="Loading..." FontSize="14" Foreground="Gray" Margin="0,8,0,0"/>
-        </StackPanel>
+        <Grid Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Margin="20,20,20,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="🤖 LLM Deployer" FontSize="28" FontWeight="Bold" Foreground="#0078D4"/>
+                    <StackPanel VerticalAlignment="Center" Margin="20,0,0,0">
+                        <Ellipse x:Name="OllamaStatusIndicator" Width="16" Height="16" Fill="#cccccc" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock x:Name="OllamaStatusText" Text="Ollama: Checking..." FontSize="14" Foreground="Gray" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock x:Name="StatusTextBlock" Text="Loading..." FontSize="14" Foreground="Gray" Margin="0,8,0,0"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,10">
+                <Button x:Name="StartOllamaButton" Content="▶ Start Ollama" Click="StartOllama_Click" 
+                        Padding="12,6" Background="#28a745" Foreground="White" FontWeight="Bold" Margin="0,0,8,0"/>
+                <Button x:Name="StopOllamaButton" Content="⏹ Stop Ollama" Click="StopOllama_Click" 
+                        Padding="12,6" Background="#dc3545" Foreground="White" FontWeight="Bold"/>
+            </StackPanel>
+        </Grid>
 
         <!-- Main Chat Area -->
         <Grid Grid.Row="1" Grid.Column="0" Margin="20,20,10,0">
@@ -82,9 +100,11 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <Button Grid.Column="1" Content="Clear History" Click="ClearButton_Click" Padding="15,0" Margin="0,0,8,0"/>
-                    <Button Grid.Column="2" Content="Exit" Click="ExitButton_Click" Padding="15,0"/>
+                    <Button Grid.Column="2" Content="Test Status" Click="TestStatusButton_Click" Padding="15,0" Margin="0,0,8,0" Background="#FF9800" Foreground="White"/>
+                    <Button Grid.Column="3" Content="Exit" Click="ExitButton_Click" Padding="15,0"/>
                 </Grid>
             </StackPanel>
         </Grid>
