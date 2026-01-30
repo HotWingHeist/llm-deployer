@@ -28,8 +28,20 @@ public class ChatViewModel : INotifyPropertyChanged
             {
                 _inputText = value;
                 OnPropertyChanged();
-                IsSendEnabled = !string.IsNullOrWhiteSpace(_inputText) && _currentSession != null;
+                System.Diagnostics.Debug.WriteLine($"InputText changed to: '{value}', updating IsSendEnabled");
+                UpdateSendEnabled();
             }
+        }
+    }
+
+    private void UpdateSendEnabled()
+    {
+        var oldState = _isSendEnabled;
+        var newState = !string.IsNullOrWhiteSpace(_inputText) && _currentSession != null;
+        if (oldState != newState)
+        {
+            System.Diagnostics.Debug.WriteLine($"IsSendEnabled: {oldState} -> {newState} (InputText='{_inputText}', CurrentSession={_currentSession != null})");
+            IsSendEnabled = newState;
         }
     }
 
@@ -57,36 +69,57 @@ public class ChatViewModel : INotifyPropertyChanged
         _chatService = new ChatService(_modelManager);
     }
 
-    public async Task InitializeAsync()
+    public void Initialize()
     {
         try
         {
-            StatusText = "Loading default model...";
-            var model = await _modelManager.LoadModelAsync("C:\\models\\default-model.bin");
+            System.Diagnostics.Debug.WriteLine("[INIT] Step 1: Starting initialization...");
+            StatusText = "Initializing...";
+            
+            System.Diagnostics.Debug.WriteLine("[INIT] Step 2: Creating default model...");
+            var model = new LlmModel
+            {
+                Id = Guid.NewGuid().ToString(),
+                Name = "Default LLM",
+                Path = "default"
+            };
+            System.Diagnostics.Debug.WriteLine($"[INIT] Step 2b: Model created with ID: {model.Id}");
+            
+            System.Diagnostics.Debug.WriteLine("[INIT] Step 3: Adding to collections...");
             LoadedModels.Add(model);
             SelectedModel = model;
 
+            System.Diagnostics.Debug.WriteLine("[INIT] Step 4: Creating session...");
             _currentSession = _chatService.StartSession(model.Id);
-            StatusText = $"✓ Ready - Session: {_currentSession.Id.Substring(0, 8)}...";
+            System.Diagnostics.Debug.WriteLine($"[INIT] Step 4b: Session created: {_currentSession.Id}");
+            
+            System.Diagnostics.Debug.WriteLine("[INIT] Step 5: Setting UI state...");
+            StatusText = "✓ Ready";
             IsSendEnabled = true;
             
-            AddSystemMessage("Chat session started. Ready to chat!");
+            System.Diagnostics.Debug.WriteLine("[INIT] Step 6: INITIALIZATION COMPLETE!");
         }
         catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[INIT] ERROR: {ex.GetType().Name}: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[INIT] StackTrace: {ex.StackTrace}");
             StatusText = $"Error: {ex.Message}";
-            AddSystemMessage($"Failed to initialize: {ex.Message}");
+            IsSendEnabled = false;
         }
     }
 
     public async Task SendMessageAsync()
     {
         if (string.IsNullOrWhiteSpace(InputText) || _currentSession == null)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SEND] Cannot send: InputText empty={string.IsNullOrWhiteSpace(InputText)}, Session null={_currentSession == null}");
             return;
+        }
 
         var message = InputText;
         InputText = string.Empty;
 
+        System.Diagnostics.Debug.WriteLine($"[SEND] User message: {message}");
         ChatMessages.Add(new ChatMessageViewModel 
         { 
             Content = message, 
@@ -96,8 +129,10 @@ public class ChatViewModel : INotifyPropertyChanged
 
         try
         {
-            StatusText = "⏳ Processing...";
+            StatusText = "Waiting for LLM response...";
+            System.Diagnostics.Debug.WriteLine($"[SEND] Calling ChatService.SendMessageAsync...");
             var response = await _chatService.SendMessageAsync(_currentSession.Id, message);
+            System.Diagnostics.Debug.WriteLine($"[SEND] Got response: {response.Substring(0, Math.Min(100, response.Length))}");
             
             ChatMessages.Add(new ChatMessageViewModel 
             { 
@@ -110,8 +145,14 @@ public class ChatViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[SEND] Error: {ex.Message}");
             StatusText = $"Error: {ex.Message}";
-            AddSystemMessage($"Error: {ex.Message}");
+            ChatMessages.Add(new ChatMessageViewModel
+            {
+                Content = $"Error: {ex.Message}",
+                Role = "system",
+                IsUserMessage = false
+            });
         }
     }
 

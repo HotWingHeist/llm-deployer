@@ -2,71 +2,145 @@
 <Window x:Class="LLMDeployer.UI.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="LLM Deployer - Chat" Height="700" Width="900"
+        Title="LLM Deployer - Chat &amp; Resources" Height="800" Width="1400"
         WindowStartupLocation="CenterScreen"
-        Background="#F5F5F5">
+        Background="#F5F5F5"
+        Loaded="Window_Loaded">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        
-        <Grid Margin="20,20,20,0">
-            <!-- Header -->
-            <StackPanel Grid.Row="0" Margin="0,0,0,20">
-                <TextBlock Text="🤖 LLM Deployer" FontSize="28" FontWeight="Bold" Foreground="#0078D4"/>
-                <TextBlock x:Name="StatusText" Text="{Binding StatusText}" FontSize="14" Foreground="Gray" Margin="0,8,0,0"/>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="350"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Header (Spans both columns) -->
+        <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Margin="20,20,20,0">
+            <TextBlock Text="🤖 LLM Deployer" FontSize="28" FontWeight="Bold" Foreground="#0078D4"/>
+            <TextBlock x:Name="StatusTextBlock" Text="Loading..." FontSize="14" Foreground="Gray" Margin="0,8,0,0"/>
+        </StackPanel>
+
+        <!-- Main Chat Area -->
+        <Grid Grid.Row="1" Grid.Column="0" Margin="20,20,10,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Chat Messages -->
+            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Background="White" BorderBrush="#DDD" BorderThickness="1">
+                <ItemsControl x:Name="ChatMessagesPanel">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,8,0,0" Padding="12,8" Background="{Binding Background}"
+                                    HorizontalAlignment="{Binding Alignment}" MaxWidth="700">
+                                <TextBlock Text="{Binding Content}" TextWrapping="Wrap" Foreground="Black"/>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Input Section -->
+            <StackPanel Grid.Row="1" Margin="0,15,0,0">
+                <Grid Height="50" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="InputTextBox" Grid.Column="0" 
+                             VerticalAlignment="Stretch" Padding="12,8"
+                             Foreground="Black" Background="White"
+                             BorderBrush="#DDD" BorderThickness="1"
+                             TextWrapping="Wrap" AcceptsReturn="False" KeyDown="InputTextBox_KeyDown"/>
+                    <Button x:Name="SendButton" Grid.Column="1" Content="Send" Margin="12,0,0,0" Padding="20,0" 
+                            Click="SendButton_Click"
+                            Background="#0078D4" Foreground="White" FontWeight="Bold"/>
+                </Grid>
+                <Grid Height="40">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="1" Content="Clear History" Click="ClearButton_Click" Padding="15,0" Margin="0,0,8,0"/>
+                    <Button Grid.Column="2" Content="Exit" Click="ExitButton_Click" Padding="15,0"/>
+                </Grid>
             </StackPanel>
         </Grid>
 
-        <!-- Chat Messages -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Background="White" BorderBrush="#DDD" BorderThickness="1" Margin="20,0,20,0">
-            <ItemsControl ItemsSource="{Binding ChatMessages}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Margin="0,8,0,0" Padding="12,8" CornerRadius="8" Background="{Binding Background}"
-                                HorizontalAlignment="{Binding Alignment}" MaxWidth="600">
-                            <TextBlock Text="{Binding Content}" TextWrapping="Wrap" Foreground="Black"/>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+        <!-- Resources Panel (Always Visible on Right) -->
+        <Border Grid.Row="1" Grid.Column="1" Margin="10,20,20,0" Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="15">
+                <StackPanel>
+                    <!-- Header -->
+                    <TextBlock Text="📊 Resources" FontSize="16" FontWeight="Bold" Foreground="#0078D4" Margin="0,0,0,15"/>
 
-        <!-- Input Section -->
-        <StackPanel Grid.Row="2" Margin="20,20,20,0">
-            <Grid Height="50" Margin="0,0,0,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBox x:Name="InputTextBox" Grid.Column="0" 
-                         Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
-                         VerticalAlignment="Stretch" Padding="12,8"
-                         Foreground="Black" Background="White"
-                         BorderBrush="#DDD" BorderThickness="1"
-                         TextWrapping="Wrap" AcceptsReturn="False"/>
-                <Button Grid.Column="1" Content="Send" Margin="12,0,0,0" Padding="20,0" 
-                        IsEnabled="{Binding IsSendEnabled}" Click="SendButton_Click"
-                        Background="#0078D4" Foreground="White" FontWeight="Bold"/>
-            </Grid>
-            <Grid Height="40">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <Button Grid.Column="1" Content="Clear History" Click="ClearButton_Click" Padding="15,0" Margin="0,0,8,0"/>
-                <Button Grid.Column="2" Content="Exit" Click="ExitButton_Click" Padding="15,0"/>
-            </Grid>
-        </StackPanel>
+                    <!-- Start/Stop Buttons -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                        <Button x:Name="StartMonitoringButton" Content="▶ Start" Click="StartMonitoring_Click" 
+                                Padding="12,6" Background="#28a745" Foreground="White" FontWeight="Bold" Margin="0,0,8,0"/>
+                        <Button x:Name="StopMonitoringButton" Content="⏹ Stop" Click="StopMonitoring_Click" 
+                                Padding="12,6" Background="#dc3545" Foreground="White" FontWeight="Bold" IsEnabled="False"/>
+                    </StackPanel>
+
+                    <TextBlock x:Name="MonitoringStatusText" Text="Monitoring: Stopped" FontSize="11" Foreground="Gray" Margin="0,0,0,15"/>
+
+                    <!-- CPU -->
+                    <TextBlock Text="CPU:" FontWeight="Bold" FontSize="12" Foreground="#495057" Margin="0,0,0,6"/>
+                    <ProgressBar Height="12" Background="#e9ecef" Foreground="#007bff" Maximum="100" Value="{Binding CpuUsagePercent}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding CpuUsagePercent, StringFormat='Usage: {0:F1}%'}" FontSize="10" Foreground="Gray" Margin="0,0,0,12"/>
+
+                    <!-- Memory -->
+                    <TextBlock Text="Memory:" FontWeight="Bold" FontSize="12" Foreground="#495057" Margin="0,0,0,6"/>
+                    <ProgressBar Height="12" Background="#e9ecef" Foreground="#28a745" Maximum="100" Value="{Binding MemoryPercent}" Margin="0,0,0,4"/>
+                    <TextBlock FontSize="10" Foreground="Gray" Margin="0,0,0,12">
+                        <Run Text="{Binding MemoryMegabytes, StringFormat='F0'}"/><Run Text=" MB ("/><Run Text="{Binding MemoryPercent, StringFormat='F1'}"/><Run Text="%)"/>
+                    </TextBlock>
+
+                    <!-- GPU -->
+                    <TextBlock Text="GPU:" FontWeight="Bold" FontSize="12" Foreground="#495057" Margin="0,0,0,6"/>
+                    <TextBlock Text="{Binding GpuName}" FontSize="10" Foreground="Gray" Margin="0,0,0,4"/>
+                    <ProgressBar Height="12" Background="#e9ecef" Foreground="#ffc107" Maximum="100" Value="{Binding GpuUsagePercent}" Margin="0,0,0,4"/>
+                    <TextBlock FontSize="10" Foreground="Gray" Margin="0,0,0,12">
+                        <Run Text="{Binding GpuUsagePercent, StringFormat='F1'}"/><Run Text="% | "/><Run Text="{Binding GpuMemoryMegabytes, StringFormat='F0'}"/><Run Text=" MB"/>
+                    </TextBlock>
+
+                    <!-- Disk I/O -->
+                    <TextBlock Text="Disk I/O:" FontWeight="Bold" FontSize="12" Foreground="#495057" Margin="0,0,0,6"/>
+                    <TextBlock FontSize="10" Foreground="Gray" Margin="0,0,0,4">
+                        <Run Text="Read: "/><Run Text="{Binding DiskReadMBps, StringFormat='F2'}"/><Run Text=" MB/s"/>
+                    </TextBlock>
+                    <TextBlock FontSize="10" Foreground="Gray" Margin="0,0,0,12">
+                        <Run Text="Write: "/><Run Text="{Binding DiskWriteMBps, StringFormat='F2'}"/><Run Text=" MB/s"/>
+                    </TextBlock>
+
+                    <!-- Threads -->
+                    <TextBlock Text="Threads:" FontWeight="Bold" FontSize="12" Foreground="#495057" Margin="0,0,0,6"/>
+                    <TextBlock FontSize="10" Foreground="Gray" Margin="0,0,0,15">
+                        <Run Text="{Binding ThreadCount}"/><Run Text=" active"/>
+                    </TextBlock>
+
+                    <!-- Legend -->
+                    <Border Padding="10" Background="#f8f9fa" BorderBrush="#dee2e6" BorderThickness="1" CornerRadius="3">
+                        <StackPanel>
+                            <TextBlock Text="Legend:" FontWeight="Bold" FontSize="10" Foreground="#495057" Margin="0,0,0,8"/>
+                            <TextBlock Text="Blue = CPU" FontSize="9" Foreground="Gray" Margin="0,0,0,2"/>
+                            <TextBlock Text="Green = Memory" FontSize="9" Foreground="Gray" Margin="0,0,0,2"/>
+                            <TextBlock Text="Yellow = GPU" FontSize="9" Foreground="Gray" Margin="0,0,0,2"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
 
         <!-- Status Bar -->
-        <StatusBar Grid.Row="3" Background="#F0F0F0" BorderBrush="#DDD" BorderThickness="0,1,0,0">
+        <StatusBar Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Background="#F0F0F0" BorderBrush="#DDD" BorderThickness="0,1,0,0">
             <StatusBarItem HorizontalAlignment="Left">
-                <TextBlock Text="{Binding StatusText}" Foreground="Gray"/>
+                <TextBlock x:Name="StatusBarText" Text="Ready" Foreground="Gray"/>
             </StatusBarItem>
         </StatusBar>
     </Grid>
