@@ -4,6 +4,8 @@ VisualStudioVersion = 17.0.31919.166
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LLMDeployer.UI", "src\LLMDeployer.UI\LLMDeployer.UI.csproj", "{A1B1C1D1-E1F1-4A1B-8C1D-1E1F2A2B3C3D}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LLMDeployer.UI.Desktop", "src\LLMDeployer.UI.Desktop\LLMDeployer.UI.Desktop.csproj", "{B1C1D1E1-F1A1-4B1C-8D1E-2F2A3B3C4D4E}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LLMDeployer.Core", "src\LLMDeployer.Core\LLMDeployer.Core.csproj", "{B2C2D2E2-F2A2-4B2C-9D2E-2F2A3B3C4D4E}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LLMDeployer.Core.Tests", "tests\LLMDeployer.Core.Tests\LLMDeployer.Core.Tests.csproj", "{C3D3E3F3-A3B3-4C3D-AE3F-3A3B4C4D5E5F}"
@@ -20,6 +22,10 @@ Global
 		{A1B1C1D1-E1F1-4A1B-8C1D-1E1F2A2B3C3D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1B1C1D1-E1F1-4A1B-8C1D-1E1F2A2B3C3D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1B1C1D1-E1F1-4A1B-8C1D-1E1F2A2B3C3D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B1C1D1E1-F1A1-4B1C-8D1E-2F2A3B3C4D4E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1C1D1E1-F1A1-4B1C-8D1E-2F2A3B3C4D4E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1C1D1E1-F1A1-4B1C-8D1E-2F2A3B3C4D4E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1C1D1E1-F1A1-4B1C-8D1E-2F2A3B3C4D4E}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B2C2D2E2-F2A2-4B2C-9D2E-2F2A3B3C4D4E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B2C2D2E2-F2A2-4B2C-9D2E-2F2A3B3C4D4E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B2C2D2E2-F2A2-4B2C-9D2E-2F2A3B3C4D4E}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -34,3 +40,4 @@ Global
 		{D4E4F4A4-B4C4-4D4E-BF4A-4B4C5D5E6F6A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
+
