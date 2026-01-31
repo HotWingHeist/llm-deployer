@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 
 public class ModelManager : IModelManager, IDisposable
 {
@@ -25,7 +26,6 @@ public class ModelManager : IModelManager, IDisposable
         // Don't block the UI thread - initialize asynchronously in background
         _initializationTask = Task.Run(async () =>
         {
-            await EnsureOllamaRunningAsync();
             await InitializeModelAsync();
         });
     }
@@ -97,13 +97,14 @@ public class ModelManager : IModelManager, IDisposable
         try
         {
             System.Diagnostics.Debug.WriteLine($"[ModelManager] Fetching models from {OLLAMA_TAGS_URL}");
-            var response = await _httpClient.GetAsync(OLLAMA_TAGS_URL);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            var response = await _httpClient.GetAsync(OLLAMA_TAGS_URL, cts.Token);
             
             System.Diagnostics.Debug.WriteLine($"[ModelManager] API Response Status: {response.StatusCode}");
             
             if (response.IsSuccessStatusCode)
             {
-                var json = await response.Content.ReadAsStringAsync();
+                var json = await response.Content.ReadAsStringAsync(cts.Token);
                 System.Diagnostics.Debug.WriteLine($"[ModelManager] API Response: {json.Substring(0, Math.Min(200, json.Length))}");
                 
                 using (JsonDocument doc = JsonDocument.Parse(json))
@@ -125,7 +126,7 @@ public class ModelManager : IModelManager, IDisposable
             }
             else
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
+                var errorContent = await response.Content.ReadAsStringAsync(cts.Token);
                 System.Diagnostics.Debug.WriteLine($"[ModelManager] API error: {response.StatusCode} - {errorContent}");
             }
         }
@@ -289,8 +290,12 @@ public class ModelManager : IModelManager, IDisposable
             // Wait for initialization to complete if still in progress
             if (_initializationTask != null && !_initializationTask.IsCompleted)
             {
-                System.Diagnostics.Debug.WriteLine($"[INFERENCE] Waiting for initialization to complete...");
-                await _initializationTask;
+                System.Diagnostics.Debug.WriteLine($"[INFERENCE] Waiting briefly for initialization to complete...");
+                var completed = await Task.WhenAny(_initializationTask, Task.Delay(2000));
+                if (completed != _initializationTask)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[INFERENCE] Initialization still running - continuing without waiting");
+                }
             }
             
             System.Diagnostics.Debug.WriteLine($"[INFERENCE] Starting inference");
@@ -552,20 +557,6 @@ public class ModelManager : IModelManager, IDisposable
 
     public void Dispose()
     {
-        if (_startedOllama && _ollamaProcess != null && !_ollamaProcess.HasExited)
-        {
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("[ModelManager] Stopping Ollama process");
-                _ollamaProcess.Kill(true);
-                _ollamaProcess.WaitForExit(5000);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ModelManager] Error stopping Ollama: {ex.Message}");
-            }
-        }
-
         _ollamaProcess?.Dispose();
         _httpClient?.Dispose();
     }

@@ -41,6 +41,9 @@ public partial class MainWindow : Window
         Log("[CTOR] InitializeComponent completed");
         _chatViewModel = new ChatViewModel();
         _resourceViewModel = new ResourceViewModel();
+        DataContext = _chatViewModel;
+        StatusTextBlock.DataContext = _chatViewModel;
+        StatusBarText.DataContext = _chatViewModel;
         Log("[CTOR] ViewModels created");
         Debug.WriteLine("[CTOR] MainWindow created");
         Log("[CTOR] ========== CONSTRUCTOR COMPLETE ==========");
@@ -91,9 +94,6 @@ public partial class MainWindow : Window
             MonitoringStatusText.Text = "Monitoring: Running";
             Debug.WriteLine("[LOADED] Monitoring auto-started");
             
-            // Update status
-            StatusTextBlock.Text = _chatViewModel.StatusText;
-            
             InputTextBox.Focus();
             
             // Start Ollama status monitor - THIS IS CRITICAL
@@ -124,11 +124,11 @@ public partial class MainWindow : Window
             
             Log($"[TIMER SETUP] Adding Tick event handler...");
             int tickCount = 0;
-            _ollamaStatusTimer.Tick += (s, e) => 
+            _ollamaStatusTimer.Tick += async (s, e) => 
             {
                 tickCount++;
                 Log($"[TIMER TICK #{tickCount}] ================================================");
-                UpdateOllamaStatus();
+                await UpdateOllamaStatusAsync();
             };
             
             Log($"[TIMER SETUP] Starting timer...");
@@ -137,7 +137,7 @@ public partial class MainWindow : Window
             
             // Check status immediately
             Log($"[TIMER SETUP] Doing initial status check...");
-            UpdateOllamaStatus();
+            _ = UpdateOllamaStatusAsync();
             
             Log($"[TIMER SETUP] ========== Timer Setup Complete ==========");
         }
@@ -148,7 +148,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void UpdateOllamaStatus()
+    private async Task UpdateOllamaStatusAsync()
     {
         try
         {
@@ -159,18 +159,45 @@ public partial class MainWindow : Window
             
             try
             {
-                Log($"[STATUS UPDATE] Creating HTTP client with 1 second timeout...");
-                using (var client = new System.Net.Http.HttpClient())
+                Log($"[STATUS UPDATE] Creating HTTP client with 2 second timeout...");
+                var handler = new System.Net.Http.HttpClientHandler
                 {
-                    client.Timeout = TimeSpan.FromSeconds(1);
-                    var url = "http://localhost:11434/api/tags";
-                    Log($"[STATUS UPDATE] Sending GET to {url}...");
-                    
-                    var response = client.GetAsync(url).Result;
-                    statusCode = response.StatusCode.ToString();
-                    isRunning = response.IsSuccessStatusCode;
-                    
-                    Log($"[STATUS UPDATE] ✓ Response received: HTTP {statusCode}, isRunning={isRunning}");
+                    UseProxy = false,
+                    Proxy = null
+                };
+
+                using (var client = new System.Net.Http.HttpClient(handler))
+                {
+                    client.Timeout = TimeSpan.FromSeconds(2);
+
+                    var versionUrls = new[]
+                    {
+                        "http://127.0.0.1:11434/api/version",
+                        "http://localhost:11434/api/version"
+                    };
+
+                    foreach (var versionUrl in versionUrls)
+                    {
+                        try
+                        {
+                            Log($"[STATUS UPDATE] Sending GET to {versionUrl}...");
+                            var response = await client.GetAsync(versionUrl, System.Net.Http.HttpCompletionOption.ResponseHeadersRead);
+                            statusCode = response.StatusCode.ToString();
+                            isRunning = response.IsSuccessStatusCode;
+
+                            Log($"[STATUS UPDATE] ✓ Response received: HTTP {statusCode}, isRunning={isRunning}");
+                            if (isRunning)
+                            {
+                                break;
+                            }
+                        }
+                        catch (TaskCanceledException tcEx)
+                        {
+                            Log($"[STATUS UPDATE] ✗ Timeout on {versionUrl}: {tcEx.Message}");
+                            statusCode = "Timeout";
+                            isRunning = false;
+                        }
+                    }
                 }
             }
             catch (TaskCanceledException tcEx)
@@ -197,30 +224,23 @@ public partial class MainWindow : Window
             
             // Update UI
             Log($"[STATUS UPDATE] Updating UI...");
-            if (isRunning)
+            await Dispatcher.InvokeAsync(() =>
             {
-                Log($"[STATUS UPDATE] → Setting to GREEN (Running)");
-                OllamaStatusIndicator.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(40, 167, 69));
-                OllamaStatusText.Text = "Ollama: Running ✓";
-                OllamaStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(40, 167, 69));
-                
-                if (_chatViewModel != null && !string.IsNullOrWhiteSpace(_chatViewModel.InputText))
+                if (isRunning)
                 {
-                    _chatViewModel.IsSendEnabled = true;
+                    Log($"[STATUS UPDATE] → Setting to GREEN (Running)");
+                    OllamaStatusIndicator.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(40, 167, 69));
+                    OllamaStatusText.Text = "Ollama: Running ✓";
+                    OllamaStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(40, 167, 69));
                 }
-            }
-            else
-            {
-                Log($"[STATUS UPDATE] → Setting to RED (Not Running) - Status: {statusCode}");
-                OllamaStatusIndicator.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(220, 53, 69));
-                OllamaStatusText.Text = $"Ollama: Not Running ({statusCode})";
-                OllamaStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(220, 53, 69));
-                
-                if (_chatViewModel != null)
+                else
                 {
-                    _chatViewModel.IsSendEnabled = false;
+                    Log($"[STATUS UPDATE] → Setting to RED (Not Running) - Status: {statusCode}");
+                    OllamaStatusIndicator.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(220, 53, 69));
+                    OllamaStatusText.Text = $"Ollama: Not Running ({statusCode})";
+                    OllamaStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(220, 53, 69));
                 }
-            }
+            });
             Log($"[STATUS UPDATE] ========== Check Complete ==========");
         }
         catch (Exception ex)
@@ -244,12 +264,6 @@ public partial class MainWindow : Window
 
     private async void SendButton_Click(object sender, RoutedEventArgs e)
     {
-        if (!_ollamaIsRunning)
-        {
-            MessageBox.Show("Ollama service is not running properly.\n\nPlease:\n1. Click 'Start Ollama' button, or\n2. Manually start Ollama and wait a moment", "Ollama Not Available");
-            return;
-        }
-        
         try
         {
             string text = InputTextBox.Text;
@@ -326,7 +340,7 @@ public partial class MainWindow : Window
                     if (response.IsSuccessStatusCode)
                     {
                         MessageBox.Show("Ollama is already running!", "Info");
-                        UpdateOllamaStatus();
+                        await UpdateOllamaStatusAsync();
                         return;
                     }
                 }
@@ -383,7 +397,7 @@ public partial class MainWindow : Window
             // Wait for Ollama to start
             for (int i = 0; i < 15; i++)
             {
-                System.Threading.Thread.Sleep(1000);
+                await Task.Delay(1000);
                 try
                 {
                     using (var client = new System.Net.Http.HttpClient() { Timeout = System.TimeSpan.FromSeconds(2) })
@@ -398,7 +412,7 @@ public partial class MainWindow : Window
                             await _chatViewModel.ReinitializeModelsAsync();
                             
                             await _chatViewModel.RefreshModelsAsync();
-                            UpdateOllamaStatus();
+                            await UpdateOllamaStatusAsync();
                             return;
                         }
                     }
@@ -407,7 +421,7 @@ public partial class MainWindow : Window
             }
             
             MessageBox.Show("Ollama was started but may still be initializing.\n\nPlease wait a moment and check the status indicator.", "Info");
-            UpdateOllamaStatus();
+            await UpdateOllamaStatusAsync();
         }
         catch (Exception ex)
         {
@@ -416,7 +430,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void StopOllama_Click(object sender, RoutedEventArgs e)
+    private async void StopOllama_Click(object sender, RoutedEventArgs e)
     {
         try
         {
@@ -435,7 +449,7 @@ public partial class MainWindow : Window
             Debug.WriteLine("[OLLAMA] Ollama service stopped");
             
             // Update status indicator
-            UpdateOllamaStatus();
+            await UpdateOllamaStatusAsync();
         }
         catch (Exception ex)
         {
@@ -445,14 +459,14 @@ public partial class MainWindow : Window
     }
 
     // Test button to manually refresh status
-    private void TestStatusButton_Click(object sender, RoutedEventArgs e)
+    private async void TestStatusButton_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show($"Status Indicator exists: {OllamaStatusIndicator != null}\n" +
                        $"Status Text exists: {OllamaStatusText != null}\n" +
                        $"Current _ollamaIsRunning: {_ollamaIsRunning}\n" +
                        $"Current indicator color: {(OllamaStatusIndicator?.Fill)}\n" +
                        $"Current text: {OllamaStatusText?.Text}", "Status Debug");
-        UpdateOllamaStatus();
+        await UpdateOllamaStatusAsync();
         MessageBox.Show($"After update _ollamaIsRunning: {_ollamaIsRunning}\n" +
                        $"After update indicator color: {(OllamaStatusIndicator?.Fill)}\n" +
                        $"After update text: {OllamaStatusText?.Text}", "Status After Update");

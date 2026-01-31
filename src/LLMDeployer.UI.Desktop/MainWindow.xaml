@@ -31,7 +31,7 @@
                     </StackPanel>
                     <TextBlock x:Name="OllamaStatusText" Text="Ollama: Checking..." FontSize="14" Foreground="Gray" Margin="8,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
-                <TextBlock x:Name="StatusTextBlock" Text="Loading..." FontSize="14" Foreground="Gray" Margin="0,8,0,0"/>
+                <TextBlock x:Name="StatusTextBlock" Text="{Binding StatusText}" FontSize="14" Foreground="Gray" Margin="0,8,0,0"/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,10">
                 <Button x:Name="StartOllamaButton" Content="▶ Start Ollama" Click="StartOllama_Click" 
@@ -188,7 +188,7 @@
         <!-- Status Bar -->
         <StatusBar Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Background="#F0F0F0" BorderBrush="#DDD" BorderThickness="0,1,0,0">
             <StatusBarItem HorizontalAlignment="Left">
-                <TextBlock x:Name="StatusBarText" Text="Ready" Foreground="Gray"/>
+                <TextBlock x:Name="StatusBarText" Text="{Binding StatusText}" Foreground="Gray"/>
             </StatusBarItem>
         </StatusBar>
     </Grid>
